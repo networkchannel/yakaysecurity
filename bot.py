@@ -16,12 +16,11 @@ from telegram.ext import (
     ContextTypes
 )
 
-
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-
 CANAL_USERNAME = "@yakayshop"  # Obligatoire pour créer des liens
 CONTACT_URL = "https://t.me/yakayuhq"
 USER_DATA_FILE = "users_data.json"
+OWNER_USERNAME = "yakayuhq"  # Ton pseudo Telegram pour /dmall
 
 # Charger les données utilisateurs
 try:
@@ -37,6 +36,7 @@ def save_data():
 # /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
+    username = update.effective_user.username or update.effective_user.first_name or "Utilisateur"
     if user_id not in user_data:
         user_data[user_id] = {
             "attempts": 0,
@@ -49,9 +49,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🔐 Rejoindre le canal", callback_data="join_request")],
         [InlineKeyboardButton("👤 Me contacter", url=CONTACT_URL)]
     ]
+
+    welcome_message = f"""
+<b>👋 Bonjour <i>{username}</i> !</b>
+
+Bienvenue sur la <b>passerelle officielle</b> pour accéder au canal <b>YakayUHQ</b> 🔐✨, le meilleur vendeur de logs Telegram.
+
+Pour rejoindre le canal, clique sur le bouton ci-dessous ⬇️
+
+Pour me contacter directement, clique sur le bouton contact juste en dessous 📩
+
+---
+
+Merci de ta confiance, et à très vite dans le canal ! 🚀
+"""
+
     await update.message.reply_text(
-        "👋 Bienvenue !\nTu es bien enregistré. Pour rejoindre le canal, tu dois résoudre un petit CAPTCHA.",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        welcome_message,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="HTML"
     )
 
 # Rejoindre canal
@@ -63,15 +79,15 @@ async def handle_join_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     # Blocage actif ?
-    if now < user_data[user_id]["blocked_until"]:
-        await query.message.reply_text("🚫 Tu as échoué trop de fois. Réessaie plus tard.")
+    if now < user_data.get(user_id, {}).get("blocked_until", 0):
+        await query.message.reply_text("🚫 Tu as échoué trop de fois. Réessaie plus tard.", parse_mode="HTML")
         return
 
     # Vérifie s'il est déjà dans le canal
     try:
         member = await context.bot.get_chat_member(chat_id=CANAL_USERNAME, user_id=query.from_user.id)
         if member.status in ['member', 'administrator', 'creator']:
-            await query.message.reply_text("✅ Tu es déjà membre du canal.")
+            await query.message.reply_text("✅ Tu es déjà membre du canal.", parse_mode="HTML")
             return
     except:
         pass  # Peut arriver si canal privé mal configuré
@@ -85,6 +101,7 @@ async def handle_join_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     random.shuffle(options)
 
+    user_data.setdefault(user_id, {})
     user_data[user_id]["captcha_answer"] = correct
     user_data[user_id]["captcha_options"] = options
     save_data()
@@ -96,7 +113,6 @@ async def handle_join_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         type=Poll.QUIZ,
         correct_option_id=options.index(correct),
         is_anonymous=False,
-        # ❌ Suppression de l’explication pour éviter d'afficher "Bravo..." même en cas d'échec
         open_period=60
     )
 
@@ -121,16 +137,18 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         await context.bot.send_message(
             chat_id=answer.user.id,
-            text=f"✅ Bien joué ! Voici ton lien pour rejoindre le canal :\n{invite.invite_link}"
+            text=f"✅ Bien joué ! Voici ton lien pour rejoindre le canal :\n{invite.invite_link}",
+            parse_mode="HTML"
         )
     else:
-        user_data[user_id]["attempts"] += 1
+        user_data[user_id]["attempts"] = user_data[user_id].get("attempts", 0) + 1
         attempts_left = 3 - user_data[user_id]["attempts"]
 
         if attempts_left > 0:
             await context.bot.send_message(
                 chat_id=answer.user.id,
-                text=f"❌ Mauvaise réponse. Il te reste {attempts_left} essai(s)."
+                text=f"❌ Mauvaise réponse. Il te reste {attempts_left} essai(s).",
+                parse_mode="HTML"
             )
         else:
             # Ban exponentiel
@@ -141,13 +159,41 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
             user_data[user_id]["strike_level"] = strike + 1
             await context.bot.send_message(
                 chat_id=answer.user.id,
-                text=f"🚫 Tu as échoué 3 fois. Tu es bloqué pour {ban_duration // 3600} heure(s)."
+                text=f"🚫 Tu as échoué 3 fois. Tu es bloqué pour {ban_duration // 3600} heure(s).",
+                parse_mode="HTML"
             )
         save_data()
 
-# Main
+# Commande /dmall réservée au propriétaire
+async def dmall(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.username != OWNER_USERNAME:
+        await update.message.reply_text("❌ Cette commande est réservée au propriétaire du bot.", parse_mode="HTML")
+        return
+
+    if not context.args:
+        await update.message.reply_text("Usage : /dmall [message]", parse_mode="HTML")
+        return
+
+    message = " ".join(context.args)
+    failed = 0
+
+    for user_id in user_data.keys():
+        try:
+            await context.bot.send_message(chat_id=int(user_id), text=message, parse_mode="HTML")
+        except Exception:
+            failed += 1
+
+    await update.message.reply_text(
+        f"✅ Message envoyé à {len(user_data) - failed} utilisateurs, {failed} échecs.",
+        parse_mode="HTML"
+    )
+
+# Application
 app = ApplicationBuilder().token(BOT_TOKEN).build()
+
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CallbackQueryHandler(handle_join_click, pattern="^join_request$"))
 app.add_handler(PollAnswerHandler(handle_poll_answer))
+app.add_handler(CommandHandler("dmall", dmall))
+
 app.run_polling()
