@@ -17,10 +17,10 @@ from telegram.ext import (
 )
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-CANAL_USERNAME = "@yakayshop"  # Obligatoire pour créer des liens
+CANAL_ID = -1002571333136
 CONTACT_URL = "https://t.me/yakayuhq"
 USER_DATA_FILE = "users_data.json"
-OWNER_USERNAME = "yakayuhq"  # Ton pseudo Telegram pour /dmall
+OWNER_USERNAME = "yakayuhq"
 
 # Charger les données utilisateurs
 try:
@@ -41,7 +41,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data[user_id] = {
             "attempts": 0,
             "blocked_until": 0,
-            "strike_level": 1  # Pour ban progressif
+            "strike_level": 1
         }
         save_data()
 
@@ -80,32 +80,28 @@ async def handle_join_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Nettoyer si l'utilisateur n'est plus dans le canal (enlever de la base)
     try:
-        member = await context.bot.get_chat_member(chat_id=CANAL_USERNAME, user_id=query.from_user.id)
+        member = await context.bot.get_chat_member(chat_id=CANAL_ID, user_id=query.from_user.id)
         if member.status in ['left', 'kicked']:
             if user_id in user_data:
                 user_data.pop(user_id)
                 save_data()
     except Exception:
-        # Si erreur, on supprime aussi pour être safe
         if user_id in user_data:
             user_data.pop(user_id)
             save_data()
 
-    # Vérifie s'il est déjà dans le canal après nettoyage
     try:
-        member = await context.bot.get_chat_member(chat_id=CANAL_USERNAME, user_id=query.from_user.id)
+        member = await context.bot.get_chat_member(chat_id=CANAL_ID, user_id=query.from_user.id)
         if member.status in ['member', 'administrator', 'creator']:
             await query.message.reply_text("✅ Tu es déjà membre du canal.", parse_mode="HTML")
             return
     except:
-        pass  # Si erreur on continue
+        pass
 
-    # Blocage actif ?
     if now < user_data.get(user_id, {}).get("blocked_until", 0):
         await query.message.reply_text("🚫 Tu as échoué trop de fois. Réessaie plus tard.", parse_mode="HTML")
         return
 
-    # CAPTCHA
     a, b = random.randint(1, 9), random.randint(1, 9)
     correct = a + b
     options = [correct] + random.sample(
@@ -138,33 +134,13 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
     selected_index = answer.option_ids[0]
     selected_value = options[selected_index] if selected_index < len(options) else None
 
-    # Nettoyer si l'utilisateur n'est plus membre du canal
-    try:
-        member = await context.bot.get_chat_member(chat_id=CANAL_USERNAME, user_id=int(user_id))
-        if member.status in ['left', 'kicked']:
-            if user_id in user_data:
-                user_data.pop(user_id)
-                save_data()
-            await context.bot.send_message(chat_id=answer.user.id,
-                text="⚠️ Tu n'es pas membre du canal. Pour obtenir un lien, commence par résoudre le captcha.",
-                parse_mode="HTML")
-            return
-    except Exception:
-        if user_id in user_data:
-            user_data.pop(user_id)
-            save_data()
-        await context.bot.send_message(chat_id=answer.user.id,
-            text="⚠️ Erreur lors de la vérification. Merci de réessayer plus tard.",
-            parse_mode="HTML")
-        return
-
     if selected_value == correct_answer:
         user_data[user_id]["attempts"] = 0
         user_data[user_id]["strike_level"] = 1
         save_data()
 
         invite = await context.bot.create_chat_invite_link(
-            chat_id=CANAL_USERNAME,
+            chat_id=CANAL_ID,
             member_limit=1,
             expire_date=int(time.time()) + 3600
         )
@@ -185,7 +161,7 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
         else:
             strike = user_data[user_id].get("strike_level", 1)
-            ban_duration = 2 * 3600 * (2 ** (strike - 1))  # 2h, 4h, 8h, ...
+            ban_duration = 2 * 3600 * (2 ** (strike - 1))
             user_data[user_id]["blocked_until"] = time.time() + ban_duration
             user_data[user_id]["attempts"] = 0
             user_data[user_id]["strike_level"] = strike + 1
@@ -220,7 +196,7 @@ async def dmall(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML"
     )
 
-# Application
+# Lancement de l'application
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
