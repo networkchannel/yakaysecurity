@@ -53,11 +53,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_message = f"""
 <b>👋 Bonjour <i>{username}</i> !</b>
 
-Bienvenue sur la <b>passerelle officielle</b> pour accéder au canal <b>YakayUHQ</b> 🔐✨, le meilleur vendeur de logs Telegram.
+Bienvenue sur la <b>passerelle officielle</b> pour accéder au canal de <b>YakayUHQ</b> 🔐✨
 
-Pour rejoindre le canal, clique sur le bouton ci-dessous ⬇️
+Pour rejoindre le canal, clique sur le bouton "Rejoindre le canal" ci-dessous ⬇️
 
-Pour me contacter directement, clique sur le bouton contact juste en dessous 📩
+Pour me contacter directement, clique sur le bouton "Me contacter" également juste en dessous 📩
 
 ---
 
