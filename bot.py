@@ -210,10 +210,17 @@ def webhook():
 def run_flask():
     flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
 
+async def process_updates():
+    while True:
+        update = await application.update_queue.get()
+        await application.process_update(update)
+
 if __name__ == "__main__":
-    # Lancer Flask dans un thread
+    # Démarre Flask dans un thread (tu l'avais déjà)
     threading.Thread(target=run_flask).start()
 
-    # Démarrer l'application Telegram
+    # Configure le webhook auprès de Telegram
     asyncio.run(application.bot.set_webhook(WEBHOOK_URL))
-    application.run_async()
+
+    # Lance la boucle pour traiter les mises à jour
+    asyncio.run(process_updates())
