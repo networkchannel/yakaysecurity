@@ -2,12 +2,9 @@ import random
 import json
 import time
 import os
-from telegram import (
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    Update,
-    Poll
-)
+
+from flask import Flask, request
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, Poll
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -15,30 +12,14 @@ from telegram.ext import (
     PollAnswerHandler,
     ContextTypes
 )
+from telegram.ext.webhook import WebhookRequestHandler
 
-# ➕ Ajout du faux serveur pour Render
-from flask import Flask
-import threading
-
-# === Faux serveur Flask (Render Web Service oblige) ===
-fake_server = Flask(__name__)
-
-@fake_server.route("/")
-def home():
-    return "✅ Bot Telegram YakayUHQ actif."
-
-def run_fake_server():
-    port = int(os.environ.get("PORT", 3000))
-    fake_server.run(host="0.0.0.0", port=port)
-
-threading.Thread(target=run_fake_server).start()
-
-# === Config Bot ===
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CANAL_ID = -1002571333136
 CONTACT_URL = "https://t.me/yakayuhq"
 USER_DATA_FILE = "users_data.json"
 OWNER_USERNAME = "yakayuhq"
+WEBHOOK_URL = "https://yakaysecurity.onrender.com/webhook"
 
 # Charger les données utilisateurs
 try:
@@ -71,11 +52,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_message = f"""
 <b>👋 Bonjour <i>{username}</i> !</b>
 
-Bienvenue sur la <b>passerelle officielle</b> pour accéder au canal de <b>YakayUHQ</b> 🔐✨
+Bienvenue sur la <b>passerelle officielle</b> pour accéder au canal <b>YakayUHQ</b> 🔐✨, le meilleur vendeur de logs Telegram.
 
-Pour rejoindre le canal, clique sur le bouton "Rejoindre le canal" ci-dessous ⬇️
+Pour rejoindre le canal, clique sur le bouton ci-dessous ⬇️
 
-Pour me contacter directement, clique sur le bouton "Me contacter" également juste en dessous 📩
+Pour me contacter directement, clique sur le bouton contact juste en dessous 📩
 
 ---
 
@@ -102,7 +83,7 @@ async def handle_join_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if user_id in user_data:
                 user_data.pop(user_id)
                 save_data()
-    except Exception:
+    except:
         if user_id in user_data:
             user_data.pop(user_id)
             save_data()
@@ -189,7 +170,7 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
         save_data()
 
-# Commande /dmall
+# dmall
 async def dmall(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.username != OWNER_USERNAME:
         await update.message.reply_text("❌ Cette commande est réservée au propriétaire du bot.", parse_mode="HTML")
@@ -213,10 +194,29 @@ async def dmall(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML"
     )
 
-# Lancement du bot
-app = ApplicationBuilder().token(BOT_TOKEN).build()
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CallbackQueryHandler(handle_join_click, pattern="^join_request$"))
-app.add_handler(PollAnswerHandler(handle_poll_answer))
-app.add_handler(CommandHandler("dmall", dmall))
-app.run_polling()
+# Application Telegram
+application = ApplicationBuilder().token(BOT_TOKEN).build()
+
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CallbackQueryHandler(handle_join_click, pattern="^join_request$"))
+application.add_handler(PollAnswerHandler(handle_poll_answer))
+application.add_handler(CommandHandler("dmall", dmall))
+
+# Flask app
+flask_app = Flask(__name__)
+
+@flask_app.route("/")
+def index():
+    return "<h3>✅ YakaySecurity Bot en ligne via Webhook !</h3>"
+
+@flask_app.route("/webhook", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    application.update_queue.put_nowait(update)
+    return "OK", 200
+
+if __name__ == "__main__":
+    # Set le webhook sur Telegram
+    import asyncio
+    asyncio.run(application.bot.set_webhook(WEBHOOK_URL))
+    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
