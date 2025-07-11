@@ -5,14 +5,14 @@ import os
 import threading
 import asyncio
 
-from flask import Flask, request
+from flask import Flask
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, Poll
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     CallbackQueryHandler,
     PollAnswerHandler,
-    ContextTypes
+    ContextTypes,
 )
 
 # -- Configs
@@ -21,7 +21,6 @@ CANAL_ID = -1002571333136
 CONTACT_URL = "https://t.me/yakayuhq"
 USER_DATA_FILE = "users_data.json"
 OWNER_USERNAME = "yakayuhq"
-WEBHOOK_URL = "https://yakaysecurity.onrender.com/webhook"
 
 # -- Charger les données utilisateurs
 try:
@@ -44,7 +43,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [InlineKeyboardButton("🔐 Rejoindre le canal", callback_data="join_request")],
-        [InlineKeyboardButton("👤 Me contacter", url=CONTACT_URL)]
+        [InlineKeyboardButton("👤 Me contacter", url=CONTACT_URL)],
     ]
 
     welcome_message = f"""
@@ -64,7 +63,7 @@ Merci de ta confiance, et à très vite dans le canal ! 🚀
     await update.message.reply_text(
         welcome_message,
         reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
 
 async def handle_join_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -99,7 +98,7 @@ async def handle_join_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     correct = a + b
     options = [correct] + random.sample(
         [x for x in range(correct - 3, correct + 4) if x != correct],
-        3
+        3,
     )
     random.shuffle(options)
 
@@ -115,7 +114,7 @@ async def handle_join_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         type=Poll.QUIZ,
         correct_option_id=options.index(correct),
         is_anonymous=False,
-        open_period=60
+        open_period=60,
     )
 
 async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -134,12 +133,12 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
         invite = await context.bot.create_chat_invite_link(
             chat_id=CANAL_ID,
             member_limit=1,
-            expire_date=int(time.time()) + 3600
+            expire_date=int(time.time()) + 3600,
         )
         await context.bot.send_message(
             chat_id=answer.user.id,
             text=f"✅ Bien joué ! Voici ton lien pour rejoindre le canal :\n{invite.invite_link}",
-            parse_mode="HTML"
+            parse_mode="HTML",
         )
     else:
         user_data[user_id]["attempts"] = user_data[user_id].get("attempts", 0) + 1
@@ -149,7 +148,7 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await context.bot.send_message(
                 chat_id=answer.user.id,
                 text=f"❌ Mauvaise réponse. Il te reste {attempts_left} essai(s).",
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
         else:
             strike = user_data[user_id].get("strike_level", 1)
@@ -160,13 +159,15 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await context.bot.send_message(
                 chat_id=answer.user.id,
                 text=f"🚫 Tu as échoué 3 fois. Tu es bloqué pour {ban_duration // 3600} heure(s).",
-                parse_mode="HTML"
+                parse_mode="HTML",
             )
         save_data()
 
 async def dmall(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.username != OWNER_USERNAME:
-        await update.message.reply_text("❌ Cette commande est réservée au propriétaire du bot.", parse_mode="HTML")
+        await update.message.reply_text(
+            "❌ Cette commande est réservée au propriétaire du bot.", parse_mode="HTML"
+        )
         return
 
     if not context.args:
@@ -183,8 +184,7 @@ async def dmall(update: Update, context: ContextTypes.DEFAULT_TYPE):
             failed += 1
 
     await update.message.reply_text(
-        f"✅ Message envoyé à {len(user_data) - failed} utilisateurs, {failed} échecs.",
-        parse_mode="HTML"
+        f"✅ Message envoyé à {len(user_data) - failed} utilisateurs, {failed} échecs.", parse_mode="HTML"
     )
 
 # -- App Telegram
@@ -194,33 +194,22 @@ application.add_handler(CallbackQueryHandler(handle_join_click, pattern="^join_r
 application.add_handler(PollAnswerHandler(handle_poll_answer))
 application.add_handler(CommandHandler("dmall", dmall))
 
-# -- Flask
+# -- Flask minimal pour garder le process actif
 flask_app = Flask(__name__)
 
 @flask_app.route("/")
 def index():
-    return "<h3>✅ YakaySecurity Bot en ligne via Webhook !</h3>"
-
-@flask_app.route("/webhook", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    application.update_queue.put_nowait(update)
-    return "OK", 200
+    return "<h3>✅ YakaySecurity Bot en ligne via Render avec polling !</h3>"
 
 def run_flask():
     flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
 
-async def process_updates():
-    while True:
-        update = await application.update_queue.get()
-        await application.process_update(update)
+def run_bot():
+    asyncio.run(application.run_polling())
 
 if __name__ == "__main__":
-    # Démarre Flask dans un thread (tu l'avais déjà)
+    # Lancer Flask dans un thread à part
     threading.Thread(target=run_flask).start()
 
-    # Configure le webhook auprès de Telegram
-    asyncio.run(application.bot.set_webhook(WEBHOOK_URL))
-
-    # Lance la boucle pour traiter les mises à jour
-    asyncio.run(process_updates())
+    # Lancer le bot en polling dans le thread principal
+    run_bot()
