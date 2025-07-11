@@ -2,6 +2,8 @@ import random
 import json
 import time
 import os
+import threading
+import asyncio
 
 from flask import Flask, request
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, Poll
@@ -13,6 +15,7 @@ from telegram.ext import (
     ContextTypes
 )
 
+# -- Configs
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CANAL_ID = -1002571333136
 CONTACT_URL = "https://t.me/yakayuhq"
@@ -20,7 +23,7 @@ USER_DATA_FILE = "users_data.json"
 OWNER_USERNAME = "yakayuhq"
 WEBHOOK_URL = "https://yakaysecurity.onrender.com/webhook"
 
-# Charger les données utilisateurs
+# -- Charger les données utilisateurs
 try:
     with open(USER_DATA_FILE, "r") as f:
         user_data = json.load(f)
@@ -31,16 +34,12 @@ def save_data():
     with open(USER_DATA_FILE, "w") as f:
         json.dump(user_data, f)
 
-# /start
+# -- Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     username = update.effective_user.username or update.effective_user.first_name or "Utilisateur"
     if user_id not in user_data:
-        user_data[user_id] = {
-            "attempts": 0,
-            "blocked_until": 0,
-            "strike_level": 1
-        }
+        user_data[user_id] = {"attempts": 0, "blocked_until": 0, "strike_level": 1}
         save_data()
 
     keyboard = [
@@ -68,7 +67,6 @@ Merci de ta confiance, et à très vite dans le canal ! 🚀
         parse_mode="HTML"
     )
 
-# Rejoindre canal
 async def handle_join_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = str(query.from_user.id)
@@ -79,13 +77,11 @@ async def handle_join_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         member = await context.bot.get_chat_member(chat_id=CANAL_ID, user_id=query.from_user.id)
         if member.status in ['left', 'kicked']:
-            if user_id in user_data:
-                user_data.pop(user_id)
-                save_data()
-    except:
-        if user_id in user_data:
-            user_data.pop(user_id)
+            user_data.pop(user_id, None)
             save_data()
+    except:
+        user_data.pop(user_id, None)
+        save_data()
 
     try:
         member = await context.bot.get_chat_member(chat_id=CANAL_ID, user_id=query.from_user.id)
@@ -122,7 +118,6 @@ async def handle_join_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         open_period=60
     )
 
-# Réponse CAPTCHA
 async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     answer = update.poll_answer
     user_id = str(answer.user.id)
@@ -169,7 +164,6 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
         save_data()
 
-# dmall
 async def dmall(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.username != OWNER_USERNAME:
         await update.message.reply_text("❌ Cette commande est réservée au propriétaire du bot.", parse_mode="HTML")
@@ -193,15 +187,14 @@ async def dmall(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML"
     )
 
-# Application Telegram
+# -- App Telegram
 application = ApplicationBuilder().token(BOT_TOKEN).build()
-
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(handle_join_click, pattern="^join_request$"))
 application.add_handler(PollAnswerHandler(handle_poll_answer))
 application.add_handler(CommandHandler("dmall", dmall))
 
-# Flask app
+# -- Flask
 flask_app = Flask(__name__)
 
 @flask_app.route("/")
@@ -214,8 +207,13 @@ def webhook():
     application.update_queue.put_nowait(update)
     return "OK", 200
 
-if __name__ == "__main__":
-    # Set le webhook sur Telegram
-    import asyncio
-    asyncio.run(application.bot.set_webhook(WEBHOOK_URL))
+def run_flask():
     flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
+if __name__ == "__main__":
+    # Lancer Flask dans un thread
+    threading.Thread(target=run_flask).start()
+
+    # Démarrer l'application Telegram
+    asyncio.run(application.bot.set_webhook(WEBHOOK_URL))
+    application.run_async()
