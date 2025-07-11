@@ -16,6 +16,24 @@ from telegram.ext import (
     ContextTypes
 )
 
+# ➕ Ajout du faux serveur pour Render
+from flask import Flask
+import threading
+
+# === Faux serveur Flask (Render Web Service oblige) ===
+fake_server = Flask(__name__)
+
+@fake_server.route("/")
+def home():
+    return "✅ Bot Telegram YakayUHQ actif."
+
+def run_fake_server():
+    port = int(os.environ.get("PORT", 3000))
+    fake_server.run(host="0.0.0.0", port=port)
+
+threading.Thread(target=run_fake_server).start()
+
+# === Config Bot ===
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CANAL_ID = -1002571333136
 CONTACT_URL = "https://t.me/yakayuhq"
@@ -78,7 +96,6 @@ async def handle_join_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.answer()
 
-    # Nettoyer si l'utilisateur n'est plus dans le canal (enlever de la base)
     try:
         member = await context.bot.get_chat_member(chat_id=CANAL_ID, user_id=query.from_user.id)
         if member.status in ['left', 'kicked']:
@@ -172,7 +189,7 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
         save_data()
 
-# Commande /dmall réservée au propriétaire
+# Commande /dmall
 async def dmall(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.username != OWNER_USERNAME:
         await update.message.reply_text("❌ Cette commande est réservée au propriétaire du bot.", parse_mode="HTML")
@@ -196,12 +213,10 @@ async def dmall(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML"
     )
 
-# Lancement de l'application
+# Lancement du bot
 app = ApplicationBuilder().token(BOT_TOKEN).build()
-
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CallbackQueryHandler(handle_join_click, pattern="^join_request$"))
 app.add_handler(PollAnswerHandler(handle_poll_answer))
 app.add_handler(CommandHandler("dmall", dmall))
-
 app.run_polling()
