@@ -12,7 +12,6 @@ from telegram.ext import (
     PollAnswerHandler,
     ContextTypes
 )
-from telegram.ext.webhook import WebhookRequestHandler
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CANAL_ID = -1002571333136
